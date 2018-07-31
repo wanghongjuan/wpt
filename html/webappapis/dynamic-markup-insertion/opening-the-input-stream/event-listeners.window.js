@@ -31,8 +31,7 @@ test(t => {
   frame.contentWindow.addEventListener("focus", t.unreached_func("window event listener not removed"));
   body.onfocus = t.unreached_func("body event listener not removed");
   frame.contentDocument.open();
-  // Pending resolution from https://github.com/whatwg/html/issues/3836.
-  // assert_equals(body.onfocus, null);
+  assert_equals(body.onfocus, null);
   frame.contentWindow.focus();
   frame.contentDocument.close();
 }, "Standard event listeners are to be removed from Window");
@@ -53,13 +52,12 @@ test(t => {
   const div = body.appendChild(frame.contentDocument.createElement("div"));
   div.onclick = t.unreached_func("element event listener not removed");
   frame.contentDocument.open();
-  // Pending resolution from https://github.com/whatwg/html/issues/3836.
-  // assert_equals(div.onclick, null);
+  assert_equals(div.onclick, null);
   const e = frame.contentDocument.createEvent("mouseevents")
   e.initEvent("click", false, false);
   div.dispatchEvent(e);
   frame.contentDocument.close();
-}, "IDL attribute event handlers are to be removed");
+}, "IDL attribute event handlers are to be deactivated");
 
 test(t => {
   const frame = document.body.appendChild(document.createElement("iframe")),
@@ -69,13 +67,13 @@ test(t => {
   div.setAttribute("onclick", "throw new Error('element event listener not removed')");
   assert_not_equals(div.onclick, null);
   frame.contentDocument.open();
-  // Pending resolution from https://github.com/whatwg/html/issues/3836.
-  // assert_equals(div.onclick, null);
+  assert_equals(div.getAttribute("onclick"), "throw new Error('element event listener not removed')");
+  assert_equals(div.onclick, null);
   const e = frame.contentDocument.createEvent("mouseevents")
   e.initEvent("click", false, false);
   div.dispatchEvent(e);
   frame.contentDocument.close();
-}, "Content attribute event handlers are to be removed");
+}, "Content attribute event handlers are to be deactivated");
 
 test(t => {
   const frame = document.body.appendChild(document.createElement("iframe"));
