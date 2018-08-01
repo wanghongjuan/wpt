@@ -1,4 +1,5 @@
 let source = null;
+let updateUIParams = [];
 
 async function getFetchResult(settledFetch) {
   if (!settledFetch.response)
@@ -11,14 +12,28 @@ async function getFetchResult(settledFetch) {
   };
 }
 
+async function getResults(event) {
+  return event.fetches.values()
+    .then(fetches => Promise.all(fetches.map(fetch => getFetchResult(fetch))))
+}
+
+async function updateUI(event) {
+  if (!updateUIParams.length)
+    return 'no update';
+
+  return Promise.all(updateUIParams.map(param => event.updateUI(param)))
+           .then(() => 'update success')
+           .catch(e => e.message);
+}
+
 self.addEventListener('message', event => {
+  updateUIParams = event.data;
   source = event.source;
   source.postMessage('ready');
 });
 
 self.addEventListener('backgroundfetched', event => {
   event.waitUntil(
-    event.fetches.values()
-      .then(fetches => Promise.all(fetches.map(fetch => getFetchResult(fetch))))
-      .then(results => source.postMessage({ type: event.type, results })));
+    Promise.all([getResults(event), updateUI(event)])
+      .then(([results, update]) => source.postMessage({ type: event.type, results, update})))
 });

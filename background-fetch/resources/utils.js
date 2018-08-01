@@ -35,10 +35,12 @@ async function registerAndActivateServiceWorker(test) {
 // Creates a Promise test for |func| given the |description|. The |func| will be
 // executed with the `backgroundFetch` object of an activated Service Worker
 // Registration.
-function backgroundFetchTest(func, description) {
+// |updateUIParams| will be passed to the Service Worker, to tell it how to
+// run updateUI.
+function backgroundFetchTest(func, description, updateUIParams = []) {
   promise_test(async t => {
     const serviceWorkerRegistration = await registerAndActivateServiceWorker(t);
-    serviceWorkerRegistration.active.postMessage(null /* unused */);
+    serviceWorkerRegistration.active.postMessage(updateUIParams);
 
     assert_equals(await getMessageFromServiceWorker(), 'ready');
 
