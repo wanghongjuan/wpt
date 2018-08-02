@@ -47,25 +47,26 @@ class MockVRService {
     let device = new MockDevice(fakeDeviceInit, this);
     this.devices_.push(device);
 
+    if (this.client_) {
+      this.client_.onDeviceChanged();
+    }
+
     return device;
   }
 
   // VRService implementation.
-  setClient(client) {
+  requestDevice(client) {
     this.client_ = client;
-    for (let i = 0; i < this.devices_.length; i++) {
-      this.devices_[i].notifyClientOfDisplay();
-    }
-
-    return Promise.resolve();
+    return Promise.resolve(
+        {device: this.devices_[0] ? this.devices_[0].getDevicePtr() : null});
   }
 }
 
-// Implements both VRDisplayHost and VRMagicWindowProvider. Maintains a mock for
+// Implements both XRDevice and VRMagicWindowProvider. Maintains a mock for
 // XRPresentationProvider.
 class MockDevice {
   constructor(fakeDeviceInit, service) {
-    this.displayClient_ = new device.mojom.VRDisplayClientPtr();
+    this.sessionClient_ = new device.mojom.XRSessionClientPtr();
     this.presentation_provider_ = new MockXRPresentationProvider();
 
     this.pose_ = null;
@@ -80,23 +81,14 @@ class MockDevice {
     } else {
       this.displayInfo_ = this.getNonImmersiveDisplayInfo();
     }
-
-    if (service.client_) {
-      this.notifyClientOfDisplay();
-    }
   }
 
   // Functions for setup.
   // This function calls to the backend to add this device to the list.
-  notifyClientOfDisplay() {
-    let displayPtr = new device.mojom.VRDisplayHostPtr();
-    let displayRequest = mojo.makeRequest(displayPtr);
-    let displayBinding =
-        new mojo.Binding(device.mojom.VRDisplayHost, this, displayRequest);
-
-    let clientRequest = mojo.makeRequest(this.displayClient_);
-    this.service_.client_.onDisplayConnected(
-        displayPtr, clientRequest, this.displayInfo_);
+  getDevicePtr() {
+    let devicePtr = new device.mojom.XRDevicePtr();
+    new mojo.Binding(device.mojom.XRDevice, this, mojo.makeRequest(devicePtr));
+    return devicePtr;
   }
 
   // Test methods.
@@ -120,7 +112,7 @@ class MockDevice {
       }
 
       if (changed) {
-        this.displayClient_.onChanged(this.displayInfo_);
+        this.sessionClient_.onChanged(this.displayInfo_);
       }
     }
   }
@@ -279,7 +271,7 @@ class MockDevice {
     // do not have any use for this data at present.
   }
 
-  // VRDisplayHost implementation.
+  // XRDevice implementation.
 
   requestSession(sessionOptions, was_activation) {
     return this.supportsSession(sessionOptions).then((result) => {
@@ -310,11 +302,15 @@ class MockDevice {
             device.mojom.XREnviromentIntegrationProvider, this,
             enviromentProviderRequest);
 
+        let clientRequest = mojo.makeRequest(this.sessionClient_);
+
         return Promise.resolve({
           session: {
             submitFrameSink: submit_frame_sink,
             dataProvider: dataProviderPtr,
-            enviromentProvider: enviromentProviderPtr
+            enviromentProvider: enviromentProviderPtr,
+            clientRequest: clientRequest,
+            displayInfo: this.displayInfo_
           }
         });
       } else {
@@ -326,7 +322,7 @@ class MockDevice {
   supportsSession(options) {
     return Promise.resolve({
       supportsSession:
-          !options.exclusive || this.displayInfo_.capabilities.canPresent
+          !options.immersive || this.displayInfo_.capabilities.canPresent
     });
   };
 }
