@@ -6,60 +6,43 @@
 <script>
 'use strict';
 
-promise_test(function(t) {
-    var scope = 'resources/blank.html?skip-waiting-using-registration';
-    var url1 = 'resources/empty.js';
-    var url2 = 'resources/skip-waiting-worker.js';
-    var frame, frame_sw, sw_registration, oncontrollerchanged;
-    var saw_controllerchanged = new Promise(function(resolve) {
-        oncontrollerchanged = function(e) {
-            resolve(e);
-          };
-        })
-      .then(function(e) {
-          assert_equals(e.type, 'controllerchange',
-                        'Event name should be "controllerchange"');
-          assert_true(
-              e.target instanceof frame.contentWindow.ServiceWorkerContainer,
-              'Event target should be a ServiceWorkerContainer');
-          assert_equals(e.target.controller.state, 'activating',
-                        'Controller state should be activating');
-          assert_equals(
-              frame_sw.controller.scriptURL, normalizeURL(url2),
-              'Controller scriptURL should change to the second one');
-        });
+promise_test(async t => {
+  const SCOPE = 'resources/blank.html?skip-waiting-using-registration';
+  const SCRIPT1 = 'resources/empty.js';
+  const SCRIPT2 = 'resources/skip-waiting-worker.js';
+  
+  let registration =
+      await service_worker_unregister_and_register(t, SCRIPT1, SCOPE);
+  await wait_for_state(t, registration.installing, 'activated');
+  const frame = await with_iframe(SCOPE);
+  const new_serviceWorker = await frame.contentWindow.navigator.serviceWorker;
+  assert_equals(new_serviceWorker.controller.scriptURL, normalizeURL(SCRIPT1),
+      'Document controller scriptURL should equal to the first one');
+  registration = await navigator.serviceWorker.register(SCRIPT2,
+                                                        {scope:SCOPE});
+  const event = await new Promise(resolve => {
+    new_serviceWorker.oncontrollerchange = resolve;
+  });
+  assert_equals(event.type, 'controllerchange', 'controllerchange');
+  assert_true(
+      event.target instanceof frame.contentWindow.ServiceWorkerContainer,
+      'ServiceWorkerContainer');
+  assert_equals(event.target.controller.state, 'activating',
+                'Controller state should be activating');
+  assert_equals(new_serviceWorker.controller.scriptURL, normalizeURL(SCRIPT2),
+      'Controller scriptURL should change to the second one');
 
-    return service_worker_unregister_and_register(t, url1, scope)
-      .then(function(registration) {
-          return wait_for_state(t, registration.installing, 'activated');
-        })
-      .then(function() {
-          return with_iframe(scope);
-        })
-      .then(function(f) {
-          t.add_cleanup(function() {
-              f.remove();
-            });
-          frame = f;
-          frame_sw = f.contentWindow.navigator.serviceWorker;
-          assert_equals(
-              frame_sw.controller.scriptURL, normalizeURL(url1),
-              'Document controller scriptURL should equal to the first one');
-          frame_sw.oncontrollerchange = t.step_func(oncontrollerchanged);
-          return navigator.serviceWorker.register(url2, {scope: scope});
-        })
-      .then(function(registration) {
-          sw_registration = registration;
-          t.add_cleanup(function() {
-              registration.unregister();
-            });
-          return saw_controllerchanged;
-        })
-      .then(function() {
-          assert_not_equals(sw_registration.active, null,
-                            'Registration active worker should not be null');
-          fetch_tests_from_worker(sw_registration.active);
-        });
-  }, 'Test skipWaiting while a client is using the registration');
+  t.add_cleanup(async() => {
+    if (registration)
+      await registration.unregister();
+    if (frame)
+      frame.remove();
+  });
+
+  assert_not_equals(registration.active, null,
+                    'Registration active worker should not be null');
+  fetch_tests_from_worker(registration.active);
+
+}, 'Test skipWaiting while a client is using the registration');
 
 </script>

@@ -6,38 +6,30 @@
 <script>
 'use strict';
 
-promise_test(function(t) {
-    var scope = 'resources/blank.html?skip-waiting-without-using-registration';
-    var url = 'resources/skip-waiting-worker.js';
-    var frame_sw, sw_registration;
+promise_test(async t => {
+  const SCOPE = 'resources/blank.html?skip-waiting-without-using-registration';
+  const SCRIPE = 'resources/skip-waiting-worker.js';
+  await service_worker_unregister(t, SCOPE);
+  const frame = await with_iframe(SCOPE);
+  const serviceWorker = await frame.contentWindow.navigator.serviceWorker;
+  assert_equals(serviceWorker.controller, null,
+                'Document controller should be null');
+  const registration =
+      await navigator.serviceWorker.register(SCRIPE, {scope: SCOPE});
+  await wait_for_state(t, registration.installing, 'activated');
 
-    return service_worker_unregister(t, scope)
-      .then(function() {
-          return with_iframe(scope);
-        })
-      .then(function(f) {
-          t.add_cleanup(function() {
-              f.remove();
-            });
-          frame_sw = f.contentWindow.navigator.serviceWorker;
-          assert_equals(frame_sw.controller, null,
-                        'Document controller should be null');
-          return navigator.serviceWorker.register(url, {scope: scope});
-        })
-      .then(function(registration) {
-          sw_registration = registration;
-          t.add_cleanup(function() {
-              registration.unregister();
-            });
-          return wait_for_state(t, registration.installing, 'activated');
-        })
-      .then(function() {
-          assert_equals(frame_sw.controller, null,
-                        'Document controller should still be null');
-          assert_not_equals(sw_registration.active, null,
-                            'Registration active worker should not be null');
-          fetch_tests_from_worker(sw_registration.active);
-        });
-  }, 'Test skipWaiting while a client is not being controlled');
+  t.add_cleanup(async() => {
+    if (registration)
+      await registration.unregister();
+    if (frame)
+      frame.remove();
+  });
+
+  assert_equals(serviceWorker.controller, null,
+                'Document controller should still be null');
+  assert_not_equals(registration.active, null,
+                    'Registration active worker should not be null');
+  fetch_tests_from_worker(registration.active);
+}, 'Test skipWaiting while a client is not being controlled');
 
 </script>
